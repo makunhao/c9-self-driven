@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>校准器 · 你对自己的判断有多准</title>
+<style>
+  :root{--ink:#1c1b19;--muted:#7a756e;--line:#e6e1da;--bg:#f6f3ee;--card:#fffaf4;
+        --accent:#b4552d;--accent2:#2d5b4f;--good:#2d6a4f;--bad:#a33b2b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",serif;line-height:1.6}
+  header{max-width:980px;margin:0 auto;padding:44px 24px 8px}
+  h1{font-size:30px;margin:0 0 8px;letter-spacing:-.02em}
+  .sub{color:var(--muted);font-size:15px;max-width:700px}
+  main{max-width:980px;margin:0 auto;padding:18px 24px 60px}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:22px 0}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .stat .k{font-size:12px;color:var(--muted);letter-spacing:.04em}
+  .stat .v{font-size:26px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin-bottom:18px}
+  .panel h2{font-size:15px;margin:0 0 14px;color:var(--muted);letter-spacing:.02em}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  input,select,textarea{font:inherit;font-size:14px;padding:10px 12px;border:1px solid var(--line);
+    border-radius:10px;background:#fff;color:var(--ink)}
+  input[type=number]{width:110px}
+  textarea{width:100%;resize:vertical}
+  button{font:inherit;font-size:14px;padding:10px 16px;border-radius:10px;border:1px solid var(--line);
+    background:#fff;cursor:pointer;color:var(--ink)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.ghost{background:transparent}
+  button:hover{transform:translateY(-1px)}
+  .entry{border-top:1px solid var(--line);padding:14px 0}
+  .entry:first-of-type{border-top:0}
+  .entry .top{display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap}
+  .entry .text{font-size:15px;font-weight:600}
+  .meta{font-size:12px;color:var(--muted)}
+  .bar{height:7px;background:#ece6dd;border-radius:99px;margin:8px 0 4px;overflow:hidden}
+  .bar>i{display:block;height:100%;background:linear-gradient(90deg,#d98a5f,#b4552d)}
+  .resolve{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
+  .resolve input{width:90px}
+  .done{color:var(--good);font-weight:600}
+  .over{color:var(--bad)}
+  .chart{display:flex;gap:10px;align-items:flex-end;height:180px;padding-top:10px}
+  .col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:3px;text-align:center}
+  .col .pair{display:flex;gap:3px;align-items:flex-end;height:150px;justify-content:center}
+  .col .b{width:16px;border-radius:4px 4px 0 0}
+  .col .b.pred{background:#d8cfc4}.col .b.act{background:var(--accent2)}
+  .col .lab{font-size:11px;color:var(--muted)}
+  .legend{font-size:12px;color:var(--muted);margin-top:8px}
+  footer{max-width:980px;margin:0 auto;padding:0 24px 40px;color:var(--muted);font-size:12px}
+  @media(max-width:640px){h1{font-size:24px}.stats{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>校准器</h1>
+  <p class="sub">
+    每件事开工前写一个预期达成度（0–100），做完写实际值。
+    它不评价你做得对不对，只告诉你：<b>你对自己的判断，偏了多少。</b>
+  </p>
+</header>
+<main>
+  <div class="stats">
+    <div class="stat"><div class="k">预测总数</div><div class="v" id="nAll">0</div></div>
+    <div class="stat"><div class="k">已结算</div><div class="v" id="nDone">0</div></div>
+    <div class="stat"><div class="k">平均 ΔR</div><div class="v" id="meanDelta">—</div></div>
+    <div class="stat"><div class="k">平均偏差 |ΔR|</div><div class="v" id="mae">—</div></div>
+    <div class="stat"><div class="k">Brier 分数</div><div class="v" id="brier">—</div></div>
+  </div>
+
+  <section class="panel">
+    <h2>新增一条预测</h2>
+    <textarea id="text" rows="2" placeholder="例：C3C 的联合产出能在 11 月 20 日前做到可展示（可验证：有 PDF + 截图 + 自校验记录）"></textarea>
+    <div class="row" style="margin-top:10px">
+      <label class="meta">预期达成度
+        <input id="expected" type="number" min="0" max="100" value="70"> %
+      </label>
+      <label class="meta">类别
+        <select id="cat">
+          <option>交付</option><option>学习</option><option>协作</option><option>生活</option>
+        </select>
+      </label>
+      <label class="meta">截止日期
+        <input id="due" type="date">
+      </label>
+      <button id="add" class="primary">加入</button>
+    </div>
+    <div class="meta" style="margin-top:8px">预测写的是"达成度"，不是"会不会做"；做完按真实完成度结算（0–100）。</div>
+  </section>
+
+  <section class="panel">
+    <h2>校准曲线（每个区间的预期 vs 实际）</h2>
+    <div class="chart" id="chart"></div>
+    <div class="legend">灰 = 你说的；绿 = 实际发生的（区间内平均）。两根柱子越接近，说明你越了解自己。</div>
+  </section>
+
+  <section class="panel">
+    <h2>预测列表</h2>
+    <div id="list"></div>
+  </section>
+
+  <div class="row">
+    <button id="export" class="ghost">导出 JSON</button>
+    <button id="importBtn" class="ghost">导入 JSON</button>
+    <input id="file" type="file" accept="application/json" hidden>
+    <button id="reset" class="ghost">清空（不可恢复）</button>
+  </div>
+</main>
+<footer>
+  数据只存在本机浏览器（localStorage），不上传任何服务器。换设备请用"导出 JSON"。
+</footer>
+
+<script>
+const KEY = "forecast.v1";
+const SEED = [
+  {id:"s1",date:"2026-10-02",text:"C3：群内参与能拿到完整证据（全量拉取后确认有回应）",expected:75,actual:25,cat:"协作",due:"",done:true},
+  {id:"s2",date:"2026-10-04",text:"C4B：代码块转换一次做对，换行不出问题",expected:85,actual:55,cat:"交付",due:"",done:true},
+  {id:"s3",date:"2026-10-04",text:"C4C：6 道线代题一次全对，无需返工",expected:95,actual:60,cat:"交付",due:"",done:true},
+  {id:"s4",date:"2026-10-04",text:"C2G：4096 词表的 BPB 低于 1024（3 seed 验证）",expected:80,actual:30,cat:"学习",due:"",done:true},
+  {id:"s5",date:"2026-10-04",text:"C4A：黄金集能抓出真实 bug，而非只验证自造样例",expected:60,actual:90,cat:"学习",due:"",done:true}
+];
+
+let data = load();
+const $ = id => document.getElementById(id);
+
+function load(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  return SEED.slice();
+}
+function save(){ localStorage.setItem(KEY, JSON.stringify(data)); }
+function pct(x){ return Math.round(x*100)/100; }
+
+function metrics(){
+  const done = data.filter(d=>d.done && typeof d.actual === "number");
+  if(!done.length) return {n:data.length,done:0,mean:null,mae:null,brier:null};
+  const deltas = done.map(d=>(d.actual-d.expected)/100);
+  const mean = deltas.reduce((a,b)=>a+b,0)/deltas.length;
+  const mae = deltas.reduce((a,b)=>a+Math.abs(b),0)/deltas.length;
+  const brier = deltas.reduce((a,b)=>a+b*b,0)/deltas.length;
+  return {n:data.length,done:done.length,mean,mae,brier};
+}
+
+function renderStats(){
+  const m = metrics();
+  $("nAll").textContent = m.n;
+  $("nDone").textContent = m.done;
+  $("meanDelta").textContent = m.mean===null?"—":(m.mean>=0?"+":"")+pct(m.mean);
+  $("mae").textContent = m.mae===null?"—":pct(m.mae);
+  $("brier").textContent = m.brier===null?"—":pct(m.brier);
+  $("meanDelta").className = "v " + (m.mean===null?"":(m.mean<0?"over":"done"));
+}
+
+function renderChart(){
+  const buckets = [0,20,40,60,80,100];
+  const done = data.filter(d=>d.done && typeof d.actual==="number");
+  const html = [];
+  for(let i=0;i<5;i++){
+    const lo=buckets[i], hi=buckets[i+1];
+    const rows = done.filter(d=>d.expected>=lo && d.expected< (hi===100?101:hi));
+    const pred = rows.length ? rows.reduce((a,b)=>a+b.expected,0)/rows.length : 0;
+    const act = rows.length ? rows.reduce((a,b)=>a+b.actual,0)/rows.length : 0;
+    html.push(`<div class="col" title="${rows.length} 条">
+      <div class="pair">
+        <div class="b pred" style="height:${pred*1.4}px" title="预期 ${Math.round(pred)}"></div>
+        <div class="b act" style="height:${act*1.4}px" title="实际 ${Math.round(act)}"></div>
+      </div>
+      <div class="lab">${lo}–${hi}${rows.length?`<br>${rows.length}条`:""}</div>
+    </div>`);
+  }
+  $("chart").innerHTML = html.join("");
+}
+
+function renderList(){
+  if(!data.length){ $("list").innerHTML = `<div class="meta">还没有预测。先写一条。</div>`; return; }
+  $("list").innerHTML = data.slice().sort((a,b)=> (a.done===b.done? 0 : a.done?1:-1) || b.date.localeCompare(a.date)).map(d=>{
+    const delta = d.done ? d.actual-d.expected : null;
+    const cls = delta===null ? "" : (delta<0?"over":"done");
+    const deltaTxt = delta===null ? "" : `<span class="${cls}">ΔR ${delta>=0?"+":""}${delta}</span>`;
+    return `<div class="entry">
+      <div class="top"><div class="text">${escapeHtml(d.text)}</div>
+        <div class="meta">${d.cat} · ${d.date}${d.due?" · 截止 "+d.due:""} · 预期 ${d.expected}%</div></div>
+      <div class="bar"><i style="width:${Math.max(2,Math.min(100,d.expected))}%"></i></div>
+      ${d.done
+        ? `<div class="meta">实际 ${d.actual}% · ${deltaTxt}</div>`
+        : `<div class="resolve"><span class="meta">实际达成度</span>
+             <input type="number" min="0" max="100" placeholder="0–100" id="act-${d.id}">
+             <button onclick="resolve('${d.id}')">结算</button></div>`}
+    </div>`;
+  }).join("");
+}
+
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+window.resolve = function(id){
+  const v = Number($("act-"+id).value);
+  if(Number.isNaN(v) || v<0 || v>100){ alert("填 0–100"); return; }
+  const d = data.find(x=>x.id===id); if(!d) return;
+  d.actual = v; d.done = true; save(); render();
+};
+
+$("add").onclick = ()=>{
+  const text = $("text").value.trim();
+  if(!text){ alert("先写预测内容"); return; }
+  const expected = Number($("expected").value);
+  if(Number.isNaN(expected)||expected<0||expected>100){ alert("预期填 0–100"); return; }
+  data.push({id:String(Date.now()),date:new Date().toISOString().slice(0,10),text,expected,actual:null,
+             cat:$("cat").value,due:$("due").value,done:false});
+  $("text").value=""; save(); render();
+};
+
+$("export").onclick = ()=>{
+  const blob = new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  const a = document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="forecast.json"; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+};
+$("importBtn").onclick = ()=>$("file").click();
+$("file").onchange = e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader(); r.onload=()=>{ try{ const arr=JSON.parse(r.result); if(Array.isArray(arr)){ data=arr; save(); render(); } }catch(err){ alert("JSON 解析失败"); } }; r.readAsText(f);
+};
+$("reset").onclick = ()=>{ if(confirm("清空所有预测？建议先导出。")){ data=[]; save(); render(); } };
+
+function render(){ renderStats(); renderChart(); renderList(); }
+render();
+</script>
+</body>
+</html>
